@@ -42,10 +42,17 @@ class Owner:
     pets: list[Pet] = field(default_factory=list)
 
     def add_pet(self, pet: Pet) -> None:
-        pass
+        if any(p.name == pet.name for p in self.pets):
+            raise ValueError(f"Pet '{pet.name}' already exists for owner '{self.name}'.")
+        self.pets.append(pet)
 
     def remove_pet(self, pet_name: str) -> None:
-        pass
+        if not any(p.name == pet_name for p in self.pets):
+            raise ValueError(f"Pet '{pet_name}' not found for owner '{self.name}'.")
+        self.pets = [p for p in self.pets if p.name != pet_name]
+
+    def get_pet(self, pet_name: str) -> Optional[Pet]:
+        return next((p for p in self.pets if p.name == pet_name), None)
 
 
 @dataclass
@@ -57,10 +64,20 @@ class Pet:
     tasks: list[Task] = field(default_factory=list)
 
     def add_task(self, task: Task) -> None:
-        pass
+        if any(t.title == task.title for t in self.tasks):
+            raise ValueError(f"Task '{task.title}' already exists for pet '{self.name}'.")
+        self.tasks.append(task)
 
     def remove_task(self, task_name: str) -> None:
-        pass
+        if not any(t.title == task_name for t in self.tasks):
+            raise ValueError(f"Task '{task_name}' not found for pet '{self.name}'.")
+        self.tasks = [t for t in self.tasks if t.title != task_name]
+
+    def get_task(self, task_name: str) -> Optional[Task]:
+        return next((t for t in self.tasks if t.title == task_name), None)
+
+    def high_priority_tasks(self) -> list[Task]:
+        return [t for t in self.tasks if t.priority == Priority.HIGH]
 
 
 @dataclass
@@ -77,7 +94,7 @@ class Task:
             raise ValueError(f"priority must be a Priority enum, got {self.priority!r}")
 
     def is_high_priority(self) -> bool:
-        pass
+        return self.priority == Priority.HIGH
 
 
 class Scheduler:
@@ -86,13 +103,21 @@ class Scheduler:
         self.pet = pet
 
     def generate_plan(self) -> "DailyPlan":
-        pass
+        plan = DailyPlan(pet=self.pet, owner=self.owner)
+        used = 0
+        for task in self._sort_tasks(self.pet.tasks):
+            if self._fits_in_budget(task, used):
+                plan.add_entry(task)
+                used += task.duration_minutes
+            else:
+                plan.skipped_tasks.append(task)
+        return plan
 
     def _sort_tasks(self, tasks: list[Task]) -> list[Task]:
-        pass
+        return sorted(tasks, key=lambda t: t.priority.value, reverse=True)
 
     def _fits_in_budget(self, task: Task, used: int) -> bool:
-        pass
+        return used + task.duration_minutes <= self.owner.available_minutes
 
 
 class DailyPlan:
@@ -104,13 +129,25 @@ class DailyPlan:
         self.skipped_tasks: list[Task] = []
 
     def add_entry(self, task: Task) -> None:
-        pass
+        start = self.start_time + timedelta(minutes=self.total_minutes())
+        end = start + timedelta(minutes=task.duration_minutes)
+        self.scheduled_tasks.append(ScheduledTask(task=task, start_time=start, end_time=end))
 
     def total_minutes(self) -> int:
-        pass
+        return sum(t.task.duration_minutes for t in self.scheduled_tasks)
 
     def explain(self) -> str:
-        pass
+        lines = [f"Daily plan for {self.pet.name} ({self.pet.species}):"]
+        for entry in self.scheduled_tasks:
+            lines.append(
+                f"  {entry.start_time:%H:%M} — {entry.task.title} "
+                f"({entry.task.duration_minutes} min) [priority: {entry.task.priority.name.lower()}]"
+            )
+        if self.skipped_tasks:
+            skipped = ", ".join(t.title for t in self.skipped_tasks)
+            lines.append(f"  Skipped (time): {skipped}")
+        lines.append(f"  Total: {self.total_minutes()} / {self.owner.available_minutes} min used")
+        return "\n".join(lines)
 
 
 @dataclass

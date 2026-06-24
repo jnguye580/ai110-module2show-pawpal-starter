@@ -3,7 +3,8 @@ classDiagram
         +list~Owner~ owners
         +add_owner(owner: Owner) None
         +remove_owner(owner_name: str) None
-        +get_owner(owner_name: str) Owner
+        +get_owner(owner_name: str) Optional~Owner~
+        +get_scheduler(owner_name: str, pet_name: str) Scheduler
     }
 
     class Owner {
@@ -13,6 +14,7 @@ classDiagram
         +list~Pet~ pets
         +add_pet(pet: Pet) None
         +remove_pet(pet_name: str) None
+        +get_pet(pet_name: str) Optional~Pet~
     }
 
     class Pet {
@@ -23,12 +25,21 @@ classDiagram
         +list~Task~ tasks
         +add_task(task: Task) None
         +remove_task(task_name: str) None
+        +get_task(task_name: str) Optional~Task~
+        +high_priority_tasks() list~Task~
+    }
+
+    class Priority {
+        <<enumeration>>
+        LOW
+        MEDIUM
+        HIGH
     }
 
     class Task {
         +str title
         +int duration_minutes
-        +str priority
+        +Priority priority
         +bool is_recurring
         +str recurrence_frequency
         +str notes
@@ -39,31 +50,34 @@ classDiagram
         +Owner owner
         +Pet pet
         +generate_plan() DailyPlan
-        +_sort_tasks(tasks: list) list
+        +_sort_tasks(tasks: list~Task~) list~Task~
         +_fits_in_budget(task: Task, used: int) bool
     }
 
     class DailyPlan {
         +Pet pet
+        +Owner owner
+        +datetime start_time
         +list~ScheduledTask~ scheduled_tasks
         +list~Task~ skipped_tasks
-        +str start_time
-        +add_entry(task: Task, start_offset: int) None
+        +add_entry(task: Task) None
         +total_minutes() int
         +explain() str
     }
 
     class ScheduledTask {
         +Task task
-        +str start_time
-        +str end_time
+        +datetime start_time
+        +datetime end_time
     }
 
     PawPalSystem "1" --> "0..*" Owner : manages
     Owner "1" --> "1..*" Pet : owns
     Pet "1" --> "0..*" Task : has
+    Task --> Priority : uses
     Scheduler --> Owner : uses
     Scheduler --> Pet : schedules for
     Scheduler --> DailyPlan : produces
     DailyPlan "1" --> "0..*" ScheduledTask : contains
+    DailyPlan --> Owner : references
     ScheduledTask --> Task : wraps
