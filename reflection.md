@@ -5,7 +5,16 @@
 **a. Initial design**
 
 - Briefly describe your initial UML design.
+
+There should be a class/implementation to add pets to the system. For each pet in the system, there should be a a function to see what tasks each pet needs and what the owners specifically want for their pet. Additionally, there should be a function to keep track of how long each pet needs to stay and when they need to leave. To add on to this idea, there should also be a class that removes pets out of the system when pets leave.
+
 - What classes did you include, and what responsibilities did you assign to each?
+
+There should be a Pet class to keep track of the pets, a Owner class to match the owners to the pets and make sure each pet checks out in time, a Task class to see what tasks need to be done for each pet, and maybe a Scheduler class in order to generate a plan and order tasks by priority. Furthermore, I think having a DailyPlan class to show the user all the information they need would be good. Finally, I think having a top-level class to manage the Owner class would be good, it could help with things like removing or adding Owners.
+
+PawPalSystem → Owner → Pet → Task
+
+Scheduler uses (Owner + Pet) → produces DailyPlan → contains ScheduledTask → wraps Task
 
 **b. Design changes**
 
