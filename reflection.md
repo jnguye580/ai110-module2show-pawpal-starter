@@ -19,9 +19,12 @@ Scheduler uses (Owner + Pet) → produces DailyPlan → contains ScheduledTask �
 **b. Design changes**
 
 - Did your design change during implementation?
-- If yes, describe at least one change and why you made it.
 
----
+Yes, during implementation, I noticed some discrepancies with the relationships of the class with made things less Pythonic. Additionally, I wanted to add a priority system in my UML but the inital draft had strings like "low", "medium", and "high" which required manual mapping to numbers.
+
+- If yes, describe at least one change and why you made it.
+    
+I made the Priority into enums which makes it easier to sort by using .value. I also added @dataclass on some of the core classes in my system which makes things more Pythonic.
 
 ## 2. Scheduling Logic and Tradeoffs
 
