@@ -61,6 +61,11 @@ class Owner:
         """Return the pet with the given name, or None if not found."""
         return next((p for p in self.pets if p.name == pet_name), None)
 
+    def get_tasks(self, pet_name: Optional[str] = None, completed: Optional[bool] = None) -> list[tuple[str, "Task"]]:
+        """Return (pet_name, task) pairs filtered by pet name and/or completion status."""
+        pets = [p for p in self.pets if p.name == pet_name] if pet_name else self.pets
+        return [(p.name, t) for p in pets for t in p.filter_tasks(completed=completed)]
+
 
 @dataclass
 class Pet:
@@ -90,12 +95,19 @@ class Pet:
         """Return all tasks with HIGH priority."""
         return [t for t in self.tasks if t.priority == Priority.HIGH]
 
+    def filter_tasks(self, completed: Optional[bool] = None) -> list[Task]:
+        """Return tasks filtered by completion status. Pass None to return all tasks."""
+        if completed is None:
+            return list(self.tasks)
+        return [t for t in self.tasks if t.completed == completed]
+
 
 @dataclass
 class Task:
     title: str
     duration_minutes: int
     priority: Priority
+    preferred_time: str = ""  # "HH:MM", empty means no preference
     is_recurring: bool = False
     recurrence_frequency: str = ""
     notes: str = ""
@@ -134,6 +146,10 @@ class Scheduler:
     def _sort_tasks(self, tasks: list[Task]) -> list[Task]:
         """Return tasks sorted from highest to lowest priority."""
         return sorted(tasks, key=lambda t: t.priority.value, reverse=True)
+
+    def sort_by_time(self, tasks: list[Task]) -> list[Task]:
+        """Return tasks sorted by preferred_time ascending. Tasks with no time set go last."""
+        return sorted(tasks, key=lambda t: t.preferred_time if t.preferred_time else "99:99")
 
     def _fits_in_budget(self, task: Task, used: int) -> bool:
         """Return True if the task fits within the remaining available minutes."""
