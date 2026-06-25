@@ -101,21 +101,38 @@ class Pet:
             return list(self.tasks)
         return [t for t in self.tasks if t.completed == completed]
 
+    def mark_task_complete(self, task_title: str, today: Optional[datetime] = None) -> Optional["Task"]:
+        """Mark a task complete and, if it recurs, append the next occurrence. Returns the new task or None."""
+        task = self.get_task(task_title)
+        if task is None:
+            raise ValueError(f"Task '{task_title}' not found for pet '{self.name}'.")
+        task.mark_complete()
+        if task.is_recurring and task.recurrence_frequency:
+            next_task = task.next_occurrence(today or datetime.now())
+            self.tasks.append(next_task)
+            return next_task
+        return None
+
 
 @dataclass
 class Task:
     title: str
     duration_minutes: int
     priority: Priority
-    preferred_time: str = ""  # "HH:MM", empty means no preference
+    preferred_time: str = ""       # "HH:MM", empty means no preference
+    due_date: Optional[datetime] = None
     is_recurring: bool = False
-    recurrence_frequency: str = ""
+    recurrence_frequency: str = "" # "daily" or "weekly"
     notes: str = ""
     completed: bool = False
+
+    _RECURRENCE_DAYS = {"daily": 1, "weekly": 7}
 
     def __post_init__(self):
         if not isinstance(self.priority, Priority):
             raise ValueError(f"priority must be a Priority enum, got {self.priority!r}")
+        if self.recurrence_frequency and self.recurrence_frequency not in self._RECURRENCE_DAYS:
+            raise ValueError(f"recurrence_frequency must be 'daily', 'weekly', or ''. Got {self.recurrence_frequency!r}")
 
     def is_high_priority(self) -> bool:
         """Return True if this task has HIGH priority."""
@@ -124,6 +141,15 @@ class Task:
     def mark_complete(self) -> None:
         """Mark this task as completed."""
         self.completed = True
+
+    def next_occurrence(self, today: datetime) -> "Task":
+        """Return a fresh incomplete copy with due_date advanced by the recurrence interval from today."""
+        if not self.is_recurring or not self.recurrence_frequency:
+            raise ValueError(f"Task '{self.title}' is not a recurring task.")
+        from dataclasses import replace
+        delta = timedelta(days=self._RECURRENCE_DAYS[self.recurrence_frequency])
+        next_due = today + delta
+        return replace(self, completed=False, due_date=next_due)
 
 
 class Scheduler:
@@ -134,13 +160,8 @@ class Scheduler:
     def generate_plan(self) -> "DailyPlan":
         """Sort tasks by priority and fit them into the owner's available time budget."""
         plan = DailyPlan(pet=self.pet, owner=self.owner)
-        used = 0
         for task in self._sort_tasks(self.pet.tasks):
-            if self._fits_in_budget(task, used):
-                plan.add_entry(task)
-                used += task.duration_minutes
-            else:
-                plan.skipped_tasks.append(task)
+            (plan.add_entry if self._fits_in_budget(task, plan.total_minutes()) else plan.skipped_tasks.append)(task)
         return plan
 
     def _sort_tasks(self, tasks: list[Task]) -> list[Task]:
@@ -154,6 +175,52 @@ class Scheduler:
     def _fits_in_budget(self, task: Task, used: int) -> bool:
         """Return True if the task fits within the remaining available minutes."""
         return used + task.duration_minutes <= self.owner.available_minutes
+
+    @staticmethod
+    def _overlaps(a: "ScheduledTask", b: "ScheduledTask") -> bool:
+        """Return True if two scheduled tasks overlap in time."""
+        return a.start_time < b.end_time and b.start_time < a.end_time
+
+    def find_conflicts(self, plan: "DailyPlan") -> list[tuple["ScheduledTask", "ScheduledTask"]]:
+        """Return all overlapping task pairs within a single pet's plan."""
+        conflicts = []
+        entries = plan.scheduled_tasks
+        for i in range(len(entries)):
+            for j in range(i + 1, len(entries)):
+                if self._overlaps(entries[i], entries[j]):
+                    conflicts.append((entries[i], entries[j]))
+        return conflicts
+
+    @staticmethod
+    def find_cross_pet_conflicts(
+        plans: list["DailyPlan"],
+    ) -> list[tuple[str, "ScheduledTask", str, "ScheduledTask"]]:
+        """Return overlapping task pairs across different pets as (pet_a, task_a, pet_b, task_b) tuples."""
+        conflicts = []
+        for i in range(len(plans)):
+            for j in range(i + 1, len(plans)):
+                plan_a, plan_b = plans[i], plans[j]
+                for entry_a in plan_a.scheduled_tasks:
+                    for entry_b in plan_b.scheduled_tasks:
+                        if Scheduler._overlaps(entry_a, entry_b):
+                            conflicts.append((plan_a.pet.name, entry_a, plan_b.pet.name, entry_b))
+        return conflicts
+
+    @staticmethod
+    def warn_conflicts(plans: list["DailyPlan"]):
+        """Yield a human-readable warning string for every scheduling conflict across all plans."""
+        for i in range(len(plans)):
+            for j in range(i + 1, len(plans)):
+                plan_a, plan_b = plans[i], plans[j]
+                for entry_a in plan_a.scheduled_tasks:
+                    for entry_b in plan_b.scheduled_tasks:
+                        if Scheduler._overlaps(entry_a, entry_b):
+                            yield (
+                                f"WARNING: '{entry_a.task.title}' ({plan_a.pet.name}, "
+                                f"{entry_a.start_time:%H:%M}–{entry_a.end_time:%H:%M}) conflicts with "
+                                f"'{entry_b.task.title}' ({plan_b.pet.name}, "
+                                f"{entry_b.start_time:%H:%M}–{entry_b.end_time:%H:%M})"
+                            )
 
 
 class DailyPlan:

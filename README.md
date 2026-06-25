@@ -84,14 +84,15 @@ Sample test output:
 
 ## 📐 Smarter Scheduling
 
-> Fill in once you've implemented scheduling logic.
-
 | Feature | Method(s) | Notes |
 |---------|-----------|-------|
-| Task sorting | | e.g., by priority, duration |
-| Filtering | | e.g., skip tasks if time runs out |
-| Conflict handling | | e.g., overlapping time slots |
-| Recurring tasks | | e.g., daily vs. weekly |
+| Task sorting by priority | `Scheduler._sort_tasks()` | Sorts HIGH → MEDIUM → LOW before scheduling; highest-priority tasks claim the budget first |
+| Task sorting by time | `Scheduler.sort_by_time()` | Sorts by `preferred_time` (HH:MM) ascending; tasks with no time set go last via `"99:99"` sentinel |
+| Filtering by status | `Pet.filter_tasks(completed=)` | Returns pending, completed, or all tasks for a single pet |
+| Filtering by pet / status | `Owner.get_tasks(pet_name=, completed=)` | Aggregates across all pets; returns `(pet_name, task)` tuples |
+| Budget enforcement | `Scheduler._fits_in_budget()` | Skips any task that would exceed `owner.available_minutes`; skipped tasks stored in `DailyPlan.skipped_tasks` |
+| Conflict detection | `Scheduler.warn_conflicts()` | Generator that yields a warning string for every overlapping time slot across multiple pets' plans |
+| Recurring tasks | `Task.next_occurrence()`, `Pet.mark_task_complete()` | Supports `"daily"` (+1 day) and `"weekly"` (+7 days); completing a recurring task automatically appends the next occurrence with an updated `due_date` |
 
 ## 📸 Demo Walkthrough
 
