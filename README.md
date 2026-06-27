@@ -69,39 +69,108 @@ Daily plan for Biscuit (cat):
 ## 🧪 Testing PawPal+
 
 ```bash
-# Run the full test suite:
-pytest
+# Run the full test suite, The suite covers the full lifecycle of the PawPalSystem:
+python -m pytest
 
 # Run with coverage:
-pytest --cov
+pytest tests/ --cov=pawpal_system --cov-report=term-missing
 ```
 
 Sample test output:
 
 ```
-# Paste your pytest output here
-```
+======================================================= test session starts =======================================================
+platform darwin -- Python 3.13.0, pytest-9.1.1, pluggy-1.6.0
+rootdir: /Users/jereminguyen/ai110-module2show-pawpal-starter
+plugins: anyio-4.14.0, cov-7.1.0
+collected 38 items                                                                                                                
 
-## 📐 Smarter Scheduling
+tests/test_pawpal.py ......................................                                                                 [100%]
+
+======================================================= 38 passed in 0.02s ========================================================
+```
+# Confidence Level: ⭐ ⭐ ⭐ ⭐ 
+
+## ✨ Features
+
+- **Sort by priority** — `Scheduler._sort_tasks()` ranks tasks HIGH → MEDIUM → LOW so the most important care always claims the time budget first.
+- **Sort by preferred time** — `Scheduler.sort_by_time()` orders tasks by their `preferred_time` (HH:MM) ascending. Tasks with no time preference are pushed last using a `"99:99"` sentinel value.
+- **Filter by completion status** — `Pet.filter_tasks(completed=)` returns pending, completed, or all tasks for a single pet. `Owner.get_tasks()` does the same across every pet an owner has.
+- **Priority-first schedule generation** — `Scheduler.generate_plan()` greedily fits tasks into the owner's available minutes in priority order. Tasks that don't fit are stored in `DailyPlan.skipped_tasks` and shown as warnings in the UI.
+- **Conflict warnings** — `Scheduler.find_conflicts(plan)` detects overlapping time slots within one pet's plan. `Scheduler.find_cross_pet_conflicts(plans)` catches overlaps across different pets. Each conflict is surfaced in the UI as a separate error card with the task names, time windows, and a suggested fix.
+- **Daily and weekly recurrence** — marking a recurring task complete via `Pet.mark_task_complete()` automatically appends the next occurrence with the `due_date` advanced by 1 day (`"daily"`) or 7 days (`"weekly"`).
+
+## 📐 Algorithm Reference
 
 | Feature | Method(s) | Notes |
 |---------|-----------|-------|
-| Task sorting by priority | `Scheduler._sort_tasks()` | Sorts HIGH → MEDIUM → LOW before scheduling; highest-priority tasks claim the budget first |
-| Task sorting by time | `Scheduler.sort_by_time()` | Sorts by `preferred_time` (HH:MM) ascending; tasks with no time set go last via `"99:99"` sentinel |
-| Filtering by status | `Pet.filter_tasks(completed=)` | Returns pending, completed, or all tasks for a single pet |
-| Filtering by pet / status | `Owner.get_tasks(pet_name=, completed=)` | Aggregates across all pets; returns `(pet_name, task)` tuples |
-| Budget enforcement | `Scheduler._fits_in_budget()` | Skips any task that would exceed `owner.available_minutes`; skipped tasks stored in `DailyPlan.skipped_tasks` |
-| Conflict detection | `Scheduler.warn_conflicts()` | Generator that yields a warning string for every overlapping time slot across multiple pets' plans |
-| Recurring tasks | `Task.next_occurrence()`, `Pet.mark_task_complete()` | Supports `"daily"` (+1 day) and `"weekly"` (+7 days); completing a recurring task automatically appends the next occurrence with an updated `due_date` |
+| Sort by priority | `Scheduler._sort_tasks()` | HIGH → MEDIUM → LOW; used internally by `generate_plan()` |
+| Sort by time | `Scheduler.sort_by_time()` | Ascending HH:MM; no-preference tasks go last via `"99:99"` |
+| Filter by status | `Pet.filter_tasks(completed=)` | Single-pet; pass `None` to return all |
+| Filter across pets | `Owner.get_tasks(pet_name=, completed=)` | Returns `(pet_name, task)` tuples |
+| Budget enforcement | `Scheduler._fits_in_budget()` | Skips tasks exceeding `owner.available_minutes`; stored in `DailyPlan.skipped_tasks` |
+| Single-pet conflict detection | `Scheduler.find_conflicts(plan)` | O(n²) pair comparison within one plan |
+| Cross-pet conflict detection | `Scheduler.find_cross_pet_conflicts(plans)` | Same overlap logic across different pets' plans |
+| Conflict warning strings | `Scheduler.warn_conflicts(plans)` | Generator; yields one formatted string per conflict |
+| Recurring task generation | `Task.next_occurrence()`, `Pet.mark_task_complete()` | Supports `"daily"` (+1 day) and `"weekly"` (+7 days) |
 
 ## 📸 Demo Walkthrough
 
-Describe your app in numbered steps so a reader can follow along without watching a video:
+### UI features
 
-1. <!-- Describe this step -->
-2. <!-- Describe this step -->
-3. <!-- Describe this step -->
-4. <!-- Describe this step -->
-5. <!-- Add more steps as needed -->
+The Streamlit app (`app.py`) is divided into four steps, each building on the last:
 
-**Screenshot or video** *(optional)*: <!-- Insert a screenshot or link to a demo video here -->
+1. **Owner** — enter a name, how many minutes are available today, and a preferred start time.
+2. **Pet** — enter the pet's name, species, breed, and age. Multiple pets can be added under the same owner.
+3. **Tasks** — add care tasks with a title, duration, and priority (high / medium / low). Use the **Sort by Priority / Sort by Time** toggle to reorder the task table live using `Scheduler._sort_tasks()` or `Scheduler.sort_by_time()`.
+4. **Build Schedule** — click "Generate schedule" to see the time-slotted daily plan, any tasks skipped because they exceeded the time budget, and any conflict warnings with task names, time windows, and a plain-English fix suggestion.
+
+### Example workflow
+
+1. Set owner Jordan — 90 minutes available, starting at 08:00.
+2. Add pet Mochi (dog). Add tasks: Morning walk (30 min, high), Feeding (10 min, high), Enrichment puzzle (20 min, medium).
+3. Toggle "Sort by Priority" — the table shows high-priority tasks first.
+4. Click "Generate schedule" — Mochi's plan is built. All three tasks fit within 90 minutes. A green "No scheduling conflicts" banner confirms there are no overlaps.
+5. Add a second pet Rex with a 30-minute Morning run starting at 08:00, then generate again — a conflict warning appears because Rex's run overlaps Mochi's walk.
+
+### Sample CLI output (`python main.py`)
+
+```
+=== Today's Schedule ===
+
+Daily plan for Mochi (dog):
+  08:00 — Morning walk (30 min) [priority: high]
+  08:30 — Feeding (10 min) [priority: high]
+  08:40 — Morning walk (30 min) [priority: high]
+  09:10 — Feeding (10 min) [priority: high]
+  Skipped (time): Enrichment puzzle
+  Total: 80 / 90 min used
+
+Daily plan for Biscuit (cat):
+  08:00 — Feeding (10 min) [priority: high]
+  08:10 — Feeding (10 min) [priority: high]
+  08:20 — Bath (20 min) [priority: medium]
+  08:40 — Bath (20 min) [priority: medium]
+  09:00 — Playtime (20 min) [priority: low]
+  Total: 80 / 90 min used
+
+=== Conflict Detection Demo ===
+
+Daily plan for Rex (dog):
+  08:00 — Morning run (30 min) [priority: high]
+  Total: 30 / 60 min used
+
+Daily plan for Luna (cat):
+  08:00 — Feeding (10 min) [priority: high]
+  08:10 — Grooming (20 min) [priority: medium]
+  Total: 30 / 60 min used
+
+WARNING: 'Morning run' (Rex, 08:00–08:30) conflicts with 'Feeding' (Luna, 08:00–08:10)
+WARNING: 'Morning run' (Rex, 08:00–08:30) conflicts with 'Grooming' (Luna, 08:10–08:30)
+```
+
+---
+
+## 🧠 What I Learned About Being the Lead Architect
+
+Honestly, working with AI made me realize how much the design decisions still fall on you. The AI can write the code fast, but it doesn't know that a pet owner needs a plain-English fix suggestion instead of raw time windows — you have to know that and tell it. The biggest thing I took away is that the clearer your mental model of the system, the more useful the AI becomes. When I had the UML figured out and knew exactly what I wanted, the AI nailed it. When I was vague, I got generic output I had to fix anyway. You're not replaced as the architect — if anything, you have to be a better one, because the AI will confidently build the wrong thing if you let it.
