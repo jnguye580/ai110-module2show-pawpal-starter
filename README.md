@@ -171,6 +171,3 @@ WARNING: 'Morning run' (Rex, 08:00–08:30) conflicts with 'Grooming' (Luna, 08:
 
 ---
 
-## 🧠 What I Learned About Being the Lead Architect
-
-Honestly, working with AI made me realize how much the design decisions still fall on you. The AI can write the code fast, but it doesn't know that a pet owner needs a plain-English fix suggestion instead of raw time windows — you have to know that and tell it. The biggest thing I took away is that the clearer your mental model of the system, the more useful the AI becomes. When I had the UML figured out and knew exactly what I wanted, the AI nailed it. When I was vague, I got generic output I had to fix anyway. You're not replaced as the architect — if anything, you have to be a better one, because the AI will confidently build the wrong thing if you let it.
