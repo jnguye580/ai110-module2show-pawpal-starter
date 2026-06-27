@@ -1,6 +1,6 @@
 import pytest
 from datetime import datetime
-from pawpal_system import Owner, Pet, Task, Priority, Scheduler, PawPalSystem
+from pawpal_system import Owner, Pet, Task, Priority, Scheduler, ScheduledTask, PawPalSystem
 
 
 def make_task(title="Morning walk", duration=30, priority=Priority.HIGH,
@@ -15,12 +15,18 @@ def make_task(title="Morning walk", duration=30, priority=Priority.HIGH,
     )
 
 
-def make_pet():
-    return Pet(name="Mochi", species="dog", breed="Shiba Inu", age_years=3)
+def make_pet(name="Mochi"):
+    return Pet(name=name, species="dog", breed="Shiba Inu", age_years=3)
 
 
-def make_owner(minutes=90):
-    return Owner(name="Jordan", available_minutes=minutes, preferred_start_time="08:00")
+def make_owner(minutes=90, start="08:00"):
+    return Owner(name="Jordan", available_minutes=minutes, preferred_start_time=start)
+
+
+def make_scheduled_task(title, start_h, start_m, duration):
+    start = datetime(2026, 1, 1, start_h, start_m)
+    end = datetime(2026, 1, 1, start_h, start_m + duration)
+    return ScheduledTask(task=make_task(title, duration), start_time=start, end_time=end)
 
 
 # --- Task completion ---
@@ -62,6 +68,13 @@ def test_add_duplicate_task_raises():
         pet.add_task(make_task())
 
 
+def test_add_duplicate_pet_raises():
+    owner = make_owner()
+    owner.add_pet(make_pet())
+    with pytest.raises(ValueError):
+        owner.add_pet(make_pet())
+
+
 # --- Edge cases ---
 
 def test_task_invalid_priority_raises():
@@ -83,6 +96,20 @@ def test_remove_nonexistent_task_raises():
 def test_pet_tasks_empty_by_default():
     pet = make_pet()
     assert pet.tasks == []
+
+
+def test_get_scheduler_unknown_owner_raises():
+    system = PawPalSystem()
+    with pytest.raises(ValueError):
+        system.get_scheduler("Nobody", "Mochi")
+
+
+def test_get_scheduler_unknown_pet_raises():
+    system = PawPalSystem()
+    owner = make_owner()
+    system.add_owner(owner)
+    with pytest.raises(ValueError):
+        system.get_scheduler(owner.name, "Ghost")
 
 
 # --- Recurring tasks / next_occurrence ---
@@ -214,6 +241,32 @@ def test_sort_by_time_no_preferred_time_goes_last():
 
 # --- Scheduler: generate_plan ---
 
+def test_generate_plan_no_tasks_produces_empty_plan():
+    owner = make_owner()
+    pet = make_pet()
+    plan = Scheduler(owner, pet).generate_plan()
+    assert plan.scheduled_tasks == []
+    assert plan.skipped_tasks == []
+
+
+def test_generate_plan_exact_budget_schedules_task():
+    owner = make_owner(minutes=30)
+    pet = make_pet()
+    pet.add_task(make_task("Walk", 30, Priority.HIGH))
+    plan = Scheduler(owner, pet).generate_plan()
+    assert len(plan.scheduled_tasks) == 1
+    assert plan.skipped_tasks == []
+
+
+def test_generate_plan_one_minute_over_budget_skips_task():
+    owner = make_owner(minutes=29)
+    pet = make_pet()
+    pet.add_task(make_task("Walk", 30, Priority.HIGH))
+    plan = Scheduler(owner, pet).generate_plan()
+    assert plan.scheduled_tasks == []
+    assert len(plan.skipped_tasks) == 1
+
+
 def test_generate_plan_skips_tasks_over_budget():
     owner = make_owner(minutes=30)
     pet = make_pet()
@@ -235,7 +288,38 @@ def test_generate_plan_respects_priority_order():
     assert plan.skipped_tasks[0].title == "Low task"
 
 
+def test_generate_plan_total_minutes_correct():
+    owner = make_owner(minutes=90)
+    pet = make_pet()
+    pet.add_task(make_task("Walk",    30, Priority.HIGH))
+    pet.add_task(make_task("Feeding", 20, Priority.MEDIUM))
+    plan = Scheduler(owner, pet).generate_plan()
+    assert plan.total_minutes() == 50
+
+
 # --- Conflict detection ---
+
+def test_overlaps_identical_times_is_conflict():
+    a = make_scheduled_task("A", 8, 0, 30)
+    b = make_scheduled_task("B", 8, 0, 30)
+    assert Scheduler._overlaps(a, b)
+
+
+def test_overlaps_shared_endpoint_is_not_conflict():
+    # end of A == start of B → strict < means no overlap
+    a = make_scheduled_task("A", 8, 0, 30)   # 08:00–08:30
+    b = make_scheduled_task("B", 8, 30, 20)  # 08:30–08:50
+    assert not Scheduler._overlaps(a, b)
+
+
+def test_find_conflicts_single_task_no_conflict():
+    owner = make_owner()
+    pet = make_pet()
+    pet.add_task(make_task("Walk", 30, Priority.HIGH))
+    plan = Scheduler(owner, pet).generate_plan()
+    conflicts = Scheduler(owner, pet).find_conflicts(plan)
+    assert conflicts == []
+
 
 def test_warn_conflicts_detects_overlap():
     owner = make_owner()
